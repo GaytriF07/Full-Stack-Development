@@ -23,7 +23,7 @@ app.listen(PORT, () => {
 })
 
 // EMAIL SEND ✔
-// Socket IO
+// Socket IO    
 // Rozer Pay
 // Google Auth
 // Railway Hosting 
@@ -36,3 +36,12 @@ app.listen(PORT, () => {
 // Mlluter
 
 // Python + Streamlite
+
+
+
+
+// npm install socket.io  //server side package
+// npm install socket.io-client //client side package
+
+// emit('event name', payload)
+// on('event name', callback)
