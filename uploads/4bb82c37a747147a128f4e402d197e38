@@ -1,0 +1,17 @@
+import csv
+import datetime
+
+with open("student.csv", "w", newline="") as file:
+    writer = csv.writer(file)
+
+    writer.writerow(["Name", "Date", "Time"])
+
+    now = datetime.datetime.now()
+    date = now.strftime("%d-%m-%Y")
+    time = now.strftime("%I:%M %p")
+
+    writer.writerow(["Chetna", date, time])
+    writer.writerow(["Dnyaneshwari", date, time])
+    writer.writerow(["Radha", date, time])
+
+print("student csv file created!") 

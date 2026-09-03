@@ -23,7 +23,7 @@ app.listen(PORT, () => {
 })
 
 // EMAIL SEND ✔
-// Socket IO    
+// Socket IO    ✔
 // Rozer Pay
 // Google Auth
 // Railway Hosting 
@@ -33,7 +33,7 @@ app.listen(PORT, () => {
 // Github Action 
 // Cron Job
 // Redis
-// Mlluter
+// Multer
 
 // Python + Streamlite
 

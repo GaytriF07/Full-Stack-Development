@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sentinel — Student Attendance & Analysis System</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          base: '#050710',
+          panel: '#0D1120',
+          panel2: '#11162A',
+          hairline: '#1E2440',
+          mist: '#8B93B8',
+          fog: '#565D80',
+          paper: '#E8EAF5',
+          indig: '#6366F1',
+          indigL: '#818CF8',
+          good: '#34D399',
+          bad: '#FB7185',
+          warn: '#FBBF24',
+        },
+        fontFamily: {
+          display: ['"Space Grotesk"', 'sans-serif'],
+          body: ['"Inter"', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'monospace'],
+        },
+        boxShadow: {
+          glow: '0 0 0 1px rgba(99,102,241,0.15), 0 0 24px rgba(99,102,241,0.12)',
+        }
+      }
+    }
+  }
+</script>
+<style>
+  * { box-sizing: border-box; }
+  body { background:#050710; }
+  ::selection { background:#6366F1; color:#050710; }
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:#1E2440; border-radius:8px; }
+
+  .grain { position:fixed; inset:0; pointer-events:none; z-index:60;
+    background-image: repeating-linear-gradient(to bottom, rgba(255,255,255,0.010) 0px, rgba(255,255,255,0.010) 1px, transparent 1px, transparent 3px);
+    mix-blend-mode: overlay; }
+
+  .view { display:none; animation: fadeIn .35s ease; }
+  .view.active { display:block; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(6px);} to {opacity:1; transform:translateY(0);} }
+
+  .nav-link { display:flex; align-items:center; gap:11px; padding:10px 14px; border-radius:8px; color:#8B93B8; font-weight:500; font-size:14px; transition:.15s ease; cursor:pointer; }
+  .nav-link:hover { color:#E8EAF5; background:#11162A; }
+  .nav-link.active { color:#E8EAF5; background:linear-gradient(90deg, rgba(99,102,241,0.16), rgba(99,102,241,0.02)); border:1px solid rgba(99,102,241,0.35); }
+  .nav-link.active .nav-ic { color:#818CF8; }
+  .nav-ic { width:18px; height:18px; flex-shrink:0; color:#565D80; }
+
+  .card { background:linear-gradient(180deg, rgba(17,22,42,0.9), rgba(13,17,32,0.9)); border:1px solid #1E2440; border-radius:14px; }
+
+  .reticle { position:relative; }
+  .reticle .rb { position:absolute; width:20px; height:20px; border-color:#818CF8; border-style:solid; opacity:.9; }
+  .reticle .rb.tl { top:-1px; left:-1px; border-width:2px 0 0 2px; border-top-left-radius:6px; }
+  .reticle .rb.tr { top:-1px; right:-1px; border-width:2px 2px 0 0; border-top-right-radius:6px; }
+  .reticle .rb.bl { bottom:-1px; left:-1px; border-width:0 0 2px 2px; border-bottom-left-radius:6px; }
+  .reticle .rb.br { bottom:-1px; right:-1px; border-width:0 2px 2px 0; border-bottom-right-radius:6px; }
+
+  .video-frame { position:relative; overflow:hidden; border-radius:14px; background:radial-gradient(ellipse at 50% 30%, #0F1530 0%, #05070F 75%); border:1px solid #1E2440; aspect-ratio:16/10; }
+  .video-grid { position:absolute; inset:0; background-image:
+      linear-gradient(rgba(129,140,248,0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(129,140,248,0.06) 1px, transparent 1px);
+    background-size: 32px 32px; }
+
+  .scanline { position:absolute; left:0; right:0; height:2px; background:linear-gradient(90deg, transparent, #818CF8, transparent); box-shadow:0 0 12px 2px rgba(129,140,248,0.6); animation: sweep 2.4s linear infinite; }
+  @keyframes sweep { 0%{top:2%} 50%{top:96%} 100%{top:2%} }
+
+  .pulse { width:9px; height:9px; border-radius:50%; background:#FB7185; animation:pulseA 1.4s ease-in-out infinite; }
+  .pulse.on { background:#34D399; }
+  @keyframes pulseA { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.35; transform:scale(.7);} }
+
+  .bbox { position:absolute; border:2px solid #34D399; border-radius:4px; box-shadow:0 0 16px rgba(52,211,153,0.45); animation: popIn .25s ease; }
+  .bbox-label { position:absolute; top:-27px; left:-2px; background:#34D399; color:#032018; font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; padding:2px 8px; border-radius:4px; white-space:nowrap; }
+  @keyframes popIn { from{ transform:scale(0.85); opacity:0;} to{ transform:scale(1); opacity:1;} }
+
+  .thumb { aspect-ratio:1/1; border-radius:8px; border:1px dashed #1E2440; background:#0B0E1C; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; }
+  .thumb.filled { border-style:solid; border-color:#6366F1; background:linear-gradient(160deg,#171d3a,#0d1120); }
+
+  .btn-primary { background:#6366F1; color:#fff; font-weight:600; padding:10px 18px; border-radius:10px; font-family:'Space Grotesk',sans-serif; transition:.15s ease; box-shadow:0 4px 20px rgba(99,102,241,0.25); }
+  .btn-primary:hover { filter:brightness(1.1); transform:translateY(-1px); }
+  .btn-primary:disabled { opacity:.4; cursor:not-allowed; transform:none; }
+  .btn-ghost { border:1px solid #1E2440; color:#E8EAF5; padding:10px 18px; border-radius:10px; font-family:'Space Grotesk',sans-serif; transition:.15s ease; }
+  .btn-ghost:hover { background:#11162A; }
+  .btn-danger-ghost { border:1px solid rgba(251,113,133,0.3); color:#FB7185; padding:8px 14px; border-radius:8px; font-size:13px; transition:.15s ease; }
+  .btn-danger-ghost:hover { background:rgba(251,113,133,0.08); }
+
+  input[type=text] { background:#0B0E1C; border:1px solid #1E2440; border-radius:10px; padding:11px 14px; font-size:14px; color:#E8EAF5; width:100%; outline:none; transition:.15s ease; }
+  input[type=text]:focus { border-color:#6366F1; box-shadow:0 0 0 3px rgba(99,102,241,0.15); }
+  input[type=text]::placeholder { color:#565D80; }
+
+  .data-table th { font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:#565D80; text-align:left; padding:10px 16px; border-bottom:1px solid #1E2440; position:sticky; top:0; background:#0D1120; }
+  .data-table td { padding:11px 16px; border-bottom:1px solid #151a30; font-size:13.5px; color:#E8EAF5; }
+  .data-table tr:hover td { background:#11162A; }
+
+  .badge { display:inline-flex; align-items:center; gap:6px; font-family:'JetBrains Mono',monospace; font-size:11px; padding:3px 10px; border-radius:999px; }
+  .badge-present { background:rgba(52,211,153,0.12); color:#34D399; }
+  .badge-absent { background:rgba(251,113,133,0.12); color:#FB7185; }
+  .badge-risk { background:rgba(251,191,36,0.12); color:#FBBF24; }
+
+  .toast { animation: toastIn .3s ease, toastOut .3s ease 2.7s forwards; }
+  @keyframes toastIn { from{opacity:0; transform:translateX(20px);} to{opacity:1; transform:translateX(0);} }
+  @keyframes toastOut { to{opacity:0; transform:translateX(20px);} }
+
+  .stat-val { font-family:'JetBrains Mono',monospace; }
+  .glow-ring { box-shadow:0 0 0 3px rgba(99,102,241,0.12); }
+</style>
+</head>
+<body class="bg-base text-paper font-body min-h-screen">
+<div class="grain"></div>
+
+<div class="flex min-h-screen">
+
+  <!-- SIDEBAR -->
+  <aside class="w-[248px] shrink-0 border-r border-hairline bg-panel/70 backdrop-blur flex flex-col fixed h-screen z-20">
+    <div class="px-6 py-6 border-b border-hairline">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-indig/15 border border-indig/30 flex items-center justify-center">
+          <svg viewBox="0 0 24 24" class="w-4.5 h-4.5 text-indigL" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2 2-5z"/></svg>
+        </div>
+        <div>
+          <p class="font-display font-semibold text-[15px] tracking-tight leading-none">Sentinel</p>
+          <p class="text-[10px] text-fog font-mono uppercase tracking-widest mt-1">Attendance OS</p>
+        </div>
+      </div>
+    </div>
+
+    <nav class="flex-1 px-3 py-5 space-y-1.5" id="navList">
+      <div class="nav-link active" data-view="dashboard">
+        <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-link" data-view="register">
+        <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3.6 2.9-6 5.5-6s5.5 2.4 5.5 6"/><path d="M17 8h4M19 6v4"/></svg>
+        Student Registration
+      </div>
+      <div class="nav-link" data-view="mark">
+        <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10.5l5-3v9l-5-3"/></svg>
+        Mark Attendance
+      </div>
+      <div class="nav-link" data-view="analytics">
+        <svg class="nav-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+        Analytics Dashboard
+      </div>
+    </nav>
+
+    <div class="px-6 py-5 border-t border-hairline text-[11px] text-fog font-mono leading-relaxed">
+      <p class="flex items-center gap-2"><span class="pulse on" style="width:6px;height:6px"></span> Recognition core ready</p>
+      <p class="mt-1.5">Local session · no server</p>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="flex-1 ml-[248px] px-10 py-10 max-w-[1240px]">
+
+    <!-- ============ VIEW: DASHBOARD ============ -->
+    <section class="view active" id="view-dashboard">
+      <p class="font-mono text-xs text-indigL tracking-widest uppercase mb-2">// overview</p>
+      <h1 class="font-display text-3xl font-semibold mb-1">Good to see you back.</h1>
+      <p class="text-mist mb-10 text-[15px] max-w-xl">Here's what's happening with attendance across your class right now.</p>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10" id="dashStatCards"></div>
+
+      <div class="grid lg:grid-cols-3 gap-5 mb-10">
+        <div class="card p-6 reticle cursor-pointer hover:border-indig/40 transition" onclick="showView('register')">
+          <div class="rb tl"></div><div class="rb br"></div>
+          <div class="w-10 h-10 rounded-lg bg-indig/15 flex items-center justify-center mb-4">
+            <svg class="w-5 h-5 text-indigL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3.6 2.9-6 5.5-6s5.5 2.4 5.5 6"/><path d="M17 8h4M19 6v4"/></svg>
+          </div>
+          <h3 class="font-display font-semibold mb-1.5">Register a student</h3>
+          <p class="text-sm text-mist leading-relaxed">Capture face samples and add them to the recognition roster.</p>
+        </div>
+        <div class="card p-6 cursor-pointer hover:border-indig/40 transition" onclick="showView('mark')">
+          <div class="w-10 h-10 rounded-lg bg-good/15 flex items-center justify-center mb-4">
+            <svg class="w-5 h-5 text-good" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10.5l5-3v9l-5-3"/></svg>
+          </div>
+          <h3 class="font-display font-semibold mb-1.5">Run live recognition</h3>
+          <p class="text-sm text-mist leading-relaxed">Start the camera simulation and auto-log today's presence.</p>
+        </div>
+        <div class="card p-6 cursor-pointer hover:border-indig/40 transition" onclick="showView('analytics')">
+          <div class="w-10 h-10 rounded-lg bg-warn/15 flex items-center justify-center mb-4">
+            <svg class="w-5 h-5 text-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+          </div>
+          <h3 class="font-display font-semibold mb-1.5">View analytics</h3>
+          <p class="text-sm text-mist leading-relaxed">Trends, per-student breakdowns, and AI-generated insights.</p>
+        </div>
+      </div>
+
+      <div class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <p class="text-xs font-mono uppercase tracking-widest text-fog">Recent activity</p>
+          <span class="text-xs font-mono text-fog" id="recentCount">0 events</span>
+        </div>
+        <div id="recentActivity" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- ============ VIEW: REGISTER ============ -->
+    <section class="view" id="view-register">
+      <p class="font-mono text-xs text-indigL tracking-widest uppercase mb-2">// enrollment</p>
+      <h1 class="font-display text-3xl font-semibold mb-1">Register a new student</h1>
+      <p class="text-mist mb-10 text-[15px] max-w-xl">Capture 5–10 face samples at slightly different angles to build a reliable recognition profile.</p>
+
+      <div class="grid lg:grid-cols-[1fr_360px] gap-6 mb-10">
+
+        <!-- capture simulation -->
+        <div>
+          <div class="video-frame reticle" id="capFrame">
+            <div class="rb tl"></div><div class="rb tr"></div><div class="rb bl"></div><div class="rb br"></div>
+            <div class="video-grid"></div>
+            <div class="absolute inset-0 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" class="w-24 h-24 text-hairline" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+            </div>
+            <div id="capScanline" class="scanline hidden"></div>
+            <div id="capFace" class="hidden absolute border-2 border-indigL rounded-lg" style="box-shadow:0 0 20px rgba(129,140,248,.5)"></div>
+            <div class="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+              <span class="badge bg-panel/80 border border-hairline text-mist font-mono" id="capStatusBadge">
+                <span class="pulse" id="capDot" style="width:6px;height:6px"></span> Idle
+              </span>
+              <span class="text-[11px] font-mono text-mist bg-panel/80 px-2.5 py-1 rounded-full border border-hairline" id="capProgressText">0 / 8 samples</span>
+            </div>
+          </div>
+
+          <div class="flex gap-3 mt-4">
+            <button id="startCaptureBtn" class="btn-primary flex items-center gap-2" onclick="startCapture()">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+              Start Face Capture
+            </button>
+            <button id="resetCaptureBtn" class="btn-ghost" onclick="resetCapture()">Reset</button>
+          </div>
+
+          <div class="grid grid-cols-4 sm:grid-cols-8 gap-2 mt-5" id="thumbGrid"></div>
+        </div>
+
+        <!-- form -->
+        <div class="card p-6 h-fit">
+          <p class="text-xs font-mono uppercase tracking-widest text-fog mb-4">Student details</p>
+          <label class="block text-xs text-mist mb-2">Full name</label>
+          <input type="text" id="inpName" placeholder="e.g. Ananya Verma" class="mb-4">
+          <label class="block text-xs text-mist mb-2">Roll ID</label>
+          <input type="text" id="inpRoll" placeholder="e.g. 24CS091" class="mb-6">
+
+          <div class="flex items-center justify-between text-xs font-mono text-fog mb-2">
+            <span>Capture progress</span>
+            <span id="capPctLabel">0%</span>
+          </div>
+          <div class="w-full h-1.5 bg-panel2 rounded-full overflow-hidden mb-6">
+            <div id="capProgressBar" class="h-full bg-indig transition-all duration-300" style="width:0%"></div>
+          </div>
+
+          <button id="registerBtn" class="btn-primary w-full" disabled onclick="registerStudent()">Register Student</button>
+          <p id="registerMsg" class="text-xs font-mono mt-3 min-h-[16px]"></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-hairline">
+          <p class="text-xs font-mono uppercase tracking-widest text-fog">Registered students</p>
+          <span class="text-xs font-mono text-indigL" id="studentCountLabel">3 enrolled</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full data-table">
+            <thead><tr><th>Roll ID</th><th>Name</th><th>Samples</th><th>Registered</th><th></th></tr></thead>
+            <tbody id="studentTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ VIEW: MARK ATTENDANCE ============ -->
+    <section class="view" id="view-mark">
+      <p class="font-mono text-xs text-indigL tracking-widest uppercase mb-2">// live feed</p>
+      <h1 class="font-display text-3xl font-semibold mb-1">Mark attendance</h1>
+      <p class="text-mist mb-10 text-[15px] max-w-xl">Run the recognition simulation. Detected students above the confidence threshold are logged automatically — once per day.</p>
+
+      <div class="grid lg:grid-cols-[1fr_360px] gap-6">
+        <div>
+          <div class="video-frame reticle" id="markFrame">
+            <div class="rb tl"></div><div class="rb tr"></div><div class="rb bl"></div><div class="rb br"></div>
+            <div class="video-grid"></div>
+            <div class="absolute inset-0 flex items-center justify-center opacity-40">
+              <svg viewBox="0 0 24 24" class="w-28 h-28 text-hairline" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+            </div>
+            <div id="markScanline" class="scanline hidden"></div>
+            <div id="markBox" class="hidden"></div>
+            <div class="absolute top-3 left-3">
+              <span class="badge bg-panel/80 border border-hairline font-mono" id="markStatusBadge">
+                <span class="pulse" id="markDot" style="width:6px;height:6px"></span> Camera idle
+              </span>
+            </div>
+          </div>
+
+          <div class="flex gap-3 mt-4">
+            <button id="toggleLiveBtn" class="btn-primary flex items-center gap-2" onclick="toggleLive()">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10.5l5-3v9l-5-3"/></svg>
+              Start Live Recognition
+            </button>
+            <span class="text-xs font-mono text-fog self-center">Scans a new frame every 2.8s</span>
+          </div>
+        </div>
+
+        <div class="card p-6">
+          <p class="text-xs font-mono uppercase tracking-widest text-fog mb-4">Marked today</p>
+          <div id="todayFeed" class="space-y-3 max-h-[440px] overflow-y-auto pr-1"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ VIEW: ANALYTICS ============ -->
+    <section class="view" id="view-analytics">
+      <div class="flex flex-wrap items-center justify-between gap-4 mb-10">
+        <div>
+          <p class="font-mono text-xs text-indigL tracking-widest uppercase mb-2">// analysis</p>
+          <h1 class="font-display text-3xl font-semibold">Attendance analytics</h1>
+        </div>
+        <div class="flex gap-3">
+          <button class="btn-ghost flex items-center gap-2" onclick="exportCSV()">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+            Export CSV
+          </button>
+          <button class="btn-primary flex items-center gap-2" onclick="generateInsights()">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z"/></svg>
+            Generate AI Insights
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8" id="statCards"></div>
+
+      <div id="insightsPanel" class="hidden card p-6 mb-8 reticle border-indig/30">
+        <div class="rb tl"></div><div class="rb br"></div>
+        <div class="flex items-center gap-2 mb-4">
+          <svg class="w-4 h-4 text-indigL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3z"/></svg>
+          <p class="text-xs font-mono uppercase tracking-widest text-indigL">AI-generated insights</p>
+        </div>
+        <div id="insightsList" class="space-y-3"></div>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-5 mb-8">
+        <div class="card p-6">
+          <p class="text-xs font-mono uppercase tracking-widest text-fog mb-4">Daily present count</p>
+          <canvas id="trendChart" height="220"></canvas>
+        </div>
+        <div class="card p-6">
+          <p class="text-xs font-mono uppercase tracking-widest text-fog mb-4">Per-student attendance %</p>
+          <canvas id="barChart" height="220"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-hairline">
+          <p class="text-xs font-mono uppercase tracking-widest text-fog">Full attendance log</p>
+          <span class="text-xs font-mono text-fog" id="logCount">0 records</span>
+        </div>
+        <div class="overflow-x-auto max-h-[420px] overflow-y-auto">
+          <table class="w-full data-table">
+            <thead><tr><th>ID</th><th>Name</th><th>Date</th><th>Time</th><th>Status</th></tr></thead>
+            <tbody id="logTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- toast container -->
+<div id="toastContainer" class="fixed bottom-6 right-6 z-50 space-y-2 w-[300px]"></div>
+
+<script>
+/* =========================================================
+   STATE  (in-memory only — no localStorage, per environment)
+   ========================================================= */
+let students = [];
+let attendance = []; // {id, name, date, time, status}
+let studentSeq = 1;
+
+function pad(n){ return n.toString().padStart(2,'0'); }
+function fmtDate(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function fmtTime(d){ return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+function todayStr(){ return fmtDate(new Date()); }
+
+function seedData(){
+  const base = [
+    { name:"Nikhil Sharma", roll:"24CS081" },
+    { name:"Rahul Verma",   roll:"24CS082" },
+    { name:"Priya Nair",    roll:"24CS083" },
+  ];
+  base.forEach(s => {
+    students.push({
+      id: "S" + String(studentSeq++).padStart(3,'0'),
+      name: s.name, roll: s.roll,
+      samples: 8,
+      registeredOn: fmtDate(new Date(Date.now() - 14*86400000)),
+    });
+  });
+
+  // seed 10 historical weekday class-sessions with deliberate per-student patterns
+  // Priya: near-perfect · Rahul: solid · Nikhil: trending downward (feeds the AI insight)
+  const pattern = {
+    "Nikhil Sharma": [1,1,1,1,1,0,1,0,0,0],   // recent slump
+    "Rahul Verma":   [1,1,0,1,1,1,1,0,1,1],
+    "Priya Nair":    [1,1,1,1,1,1,1,1,1,0],
+  };
+  let d = new Date();
+  d.setDate(d.getDate() - 14);
+  let sessions = [];
+  while (sessions.length < 10) {
+    if (d.getDay() !== 0 && d.getDay() !== 6) sessions.push(fmtDate(d)); // weekdays only
+    d.setDate(d.getDate() + 1);
+  }
+  sessions.forEach((date, i) => {
+    students.forEach(st => {
+      if (pattern[st.name][i]) {
+        const hh = 9 + Math.floor(Math.random()*2), mm = Math.floor(Math.random()*60);
+        attendance.push({ id: st.id, name: st.name, date, time: `${pad(hh)}:${pad(mm)}:00`, status: "Present" });
+      }
+    });
+  });
+}
+seedData();
+
+/* =========================================================
+   NAVIGATION
+   ========================================================= */
+function showView(name){
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('.nav-link').forEach(n => n.classList.toggle('active', n.dataset.view === name));
+  if (name === 'dashboard') renderDashboard();
+  if (name === 'register') renderStudentTable();
+  if (name === 'analytics') renderAnalytics();
+}
+document.querySelectorAll('.nav-link').forEach(link => {
+  link.addEventListener('click', () => showView(link.dataset.view));
+});
+
+/* =========================================================
+   TOASTS
+   ========================================================= */
+function toast(message, kind='info'){
+  const colors = { success:'border-good/40 text-good', info:'border-indig/40 text-indigL', warn:'border-warn/40 text-warn' };
+  const el = document.createElement('div');
+  el.className = `toast card px-4 py-3 text-sm font-mono ${colors[kind]||colors.info}`;
+  el.textContent = message;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+/* =========================================================
+   VIEW 1 — REGISTRATION / FACE CAPTURE SIMULATION
+   ========================================================= */
+const TARGET_SAMPLES = 8;
+let capturedCount = 0;
+let captureTimer = null;
+
+function buildThumbGrid(){
+  const grid = document.getElementById('thumbGrid');
+  grid.innerHTML = '';
+  for (let i=0;i<TARGET_SAMPLES;i++){
+    const d = document.createElement('div');
+    d.className = 'thumb';
+    d.id = 'thumb-'+i;
+    grid.appendChild(d);
+  }
+}
+buildThumbGrid();
+
+function setCapStatus(text, live){
+  document.getElementById('capStatusBadge').innerHTML =
+    `<span class="pulse ${live?'on':''}" style="width:6px;height:6px"></span> ${text}`;
+}
+
+function startCapture(){
+  if (captureTimer) return;
+  capturedCount = 0;
+  buildThumbGrid();
+  updateCapProgress();
+  document.getElementById('startCaptureBtn').disabled = true;
+  document.getElementById('capScanline').classList.remove('hidden');
+  setCapStatus('Scanning face…', true);
+
+  captureTimer = setInterval(() => {
+    // simulate a face bounding box jitter while "scanning"
+    const frame = document.getElementById('capFrame');
+    const w = frame.clientWidth, h = frame.clientHeight;
+    const bw = w*0.28, bh = h*0.42;
+    const bx = w/2 - bw/2 + (Math.random()*16-8);
+    const by = h/2 - bh/2 + (Math.random()*10-5);
+    const box = document.getElementById('capFace');
+    box.classList.remove('hidden');
+    box.style.left = bx+'px'; box.style.top = by+'px';
+    box.style.width = bw+'px'; box.style.height = bh+'px';
+
+    // capture a sample
+    const slot = document.getElementById('thumb-'+capturedCount);
+    slot.classList.add('filled');
+    slot.innerHTML = `<svg class="w-6 h-6 text-indigL" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>`;
+    capturedCount++;
+    updateCapProgress();
+
+    if (capturedCount >= TARGET_SAMPLES){
+      clearInterval(captureTimer);
+      captureTimer = null;
+      document.getElementById('capScanline').classList.add('hidden');
+      box.classList.add('hidden');
+      setCapStatus('Capture complete', true);
+      document.getElementById('startCaptureBtn').disabled = false;
+      checkRegisterEnabled();
+    }
+  }, 550);
+}
+
+function resetCapture(){
+  clearInterval(captureTimer);
+  captureTimer = null;
+  capturedCount = 0;
+  buildThumbGrid();
+  updateCapProgress();
+  document.getElementById('capScanline').classList.add('hidden');
+  document.getElementById('capFace').classList.add('hidden');
+  document.getElementById('startCaptureBtn').disabled = false;
+  setCapStatus('Idle', false);
+  document.getElementById('registerMsg').textContent = '';
+  checkRegisterEnabled();
+}
+
+function updateCapProgress(){
+  const pct = Math.round((capturedCount/TARGET_SAMPLES)*100);
+  document.getElementById('capProgressText').textContent = `${capturedCount} / ${TARGET_SAMPLES} samples`;
+  document.getElementById('capPctLabel').textContent = pct+'%';
+  document.getElementById('capProgressBar').style.width = pct+'%';
+}
+
+function checkRegisterEnabled(){
+  const name = document.getElementById('inpName').value.trim();
+  const roll = document.getElementById('inpRoll').value.trim();
+  document.getElementById('registerBtn').disabled = !(name && roll && capturedCount >= 3);
+}
+document.getElementById('inpName').addEventListener('input', checkRegisterEnabled);
+document.getElementById('inpRoll').addEventListener('input', checkRegisterEnabled);
+
+function registerStudent(){
+  const name = document.getElementById('inpName').value.trim();
+  const roll = document.getElementById('inpRoll').value.trim();
+  if (!name || !roll || capturedCount < 3) return;
+
+  if (students.some(s => s.roll.toLowerCase() === roll.toLowerCase())){
+    document.getElementById('registerMsg').innerHTML = `<span class="text-bad">Roll ID "${roll}" is already registered.</span>`;
+    return;
+  }
+
+  students.push({
+    id: "S"+String(studentSeq++).padStart(3,'0'),
+    name, roll, samples: capturedCount,
+    registeredOn: todayStr(),
+  });
+
+  document.getElementById('registerMsg').innerHTML = `<span class="text-good">✓ ${name} registered successfully with ${capturedCount} samples.</span>`;
+  toast(`${name} added to roster`, 'success');
+
+  document.getElementById('inpName').value = '';
+  document.getElementById('inpRoll').value = '';
+  resetCapture();
+  renderStudentTable();
+}
+
+function removeStudent(id){
+  const s = students.find(x => x.id === id);
+  if (!s) return;
+  if (!confirm(`Remove ${s.name} from the roster? This does not delete past attendance records.`)) return;
+  students = students.filter(x => x.id !== id);
+  renderStudentTable();
+  toast(`${s.name} removed from roster`, 'warn');
+}
+
+function renderStudentTable(){
+  const body = document.getElementById('studentTableBody');
+  document.getElementById('studentCountLabel').textContent = `${students.length} enrolled`;
+  if (students.length === 0){
+    body.innerHTML = `<tr><td colspan="5" class="text-center text-fog font-mono py-8">No students registered yet.</td></tr>`;
+    return;
+  }
+  body.innerHTML = students.map(s => `
+    <tr>
+      <td class="font-mono text-mist">${s.roll}</td>
+      <td class="font-medium">${s.name}</td>
+      <td class="font-mono">${s.samples} imgs</td>
+      <td class="font-mono text-mist">${s.registeredOn}</td>
+      <td><button class="btn-danger-ghost" onclick="removeStudent('${s.id}')">Remove</button></td>
+    </tr>
+  `).join('');
+}
+renderStudentTable();
+
+/* =========================================================
+   VIEW 2 — LIVE RECOGNITION SIMULATION
+   ========================================================= */
+let liveTimer = null;
+let liveOn = false;
+
+function toggleLive(){
+  liveOn = !liveOn;
+  const btn = document.getElementById('toggleLiveBtn');
+  const dot = document.getElementById('markDot');
+  const badge = document.getElementById('markStatusBadge');
+  const scan = document.getElementById('markScanline');
+
+  if (liveOn){
+    btn.innerHTML = `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg> Stop Recognition`;
+    dot.classList.add('on');
+    badge.innerHTML = `<span class="pulse on" style="width:6px;height:6px"></span> Live — scanning`;
+    scan.classList.remove('hidden');
+    runScanCycle();
+    liveTimer = setInterval(runScanCycle, 2800);
+  } else {
+    btn.innerHTML = `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10.5l5-3v9l-5-3"/></svg> Start Live Recognition`;
+    dot.classList.remove('on');
+    badge.innerHTML = `<span class="pulse" style="width:6px;height:6px"></span> Camera idle`;
+    scan.classList.add('hidden');
+    document.getElementById('markBox').classList.add('hidden');
+    clearInterval(liveTimer);
+  }
+}
+
+function runScanCycle(){
+  if (students.length === 0){
+    toast('No registered students to recognize', 'warn');
+    return;
+  }
+  const frame = document.getElementById('markFrame');
+  const box = document.getElementById('markBox');
+
+  // 15% chance of "no face" / unrecognized frame for realism
+  const roll = Math.random();
+  if (roll < 0.12){
+    box.classList.add('hidden');
+    return;
+  }
+
+  const student = students[Math.floor(Math.random()*students.length)];
+  const confidence = (roll < 0.22) ? (60+Math.random()*15) : (85+Math.random()*14); // occasional low-confidence miss
+  const recognized = confidence >= 80;
+
+  const w = frame.clientWidth, h = frame.clientHeight;
+  const bw = w*0.24, bh = h*0.38;
+  const bx = Math.random()*(w-bw*1.4)+bw*0.2;
+  const by = h*0.14 + Math.random()*(h*0.25);
+
+  box.className = 'absolute rounded-lg border-2 ' + (recognized ? 'border-good' : 'border-warn');
+  box.style.cssText += `left:${bx}px; top:${by}px; width:${bw}px; height:${bh}px; box-shadow:0 0 20px ${recognized?'rgba(52,211,153,.5)':'rgba(251,191,36,.5)'};`;
+  box.innerHTML = `<span class="absolute -top-7 left-0 font-mono text-xs font-semibold px-2 py-1 rounded whitespace-nowrap"
+      style="background:${recognized?'#34D399':'#FBBF24'}; color:#052015;">
+      ${recognized ? student.name.split(' ')[0]+' — '+confidence.toFixed(1)+'%' : 'Low confidence — '+confidence.toFixed(1)+'%'}
+    </span>`;
+  box.classList.remove('hidden');
+
+  if (recognized){
+    markPresent(student, confidence);
+  }
+}
+
+function markPresent(student, confidence){
+  const date = todayStr();
+  const already = attendance.some(a => a.id === student.id && a.date === date);
+  if (already){
+    return; // duplicate-per-day prevention — silently skip re-logging
+  }
+  const now = new Date();
+  attendance.push({ id: student.id, name: student.name, date, time: fmtTime(now), status: 'Present' });
+  toast(`${student.name} marked Present (${confidence.toFixed(1)}%)`, 'success');
+  renderTodayFeed();
+}
+
+function renderTodayFeed(){
+  const feed = document.getElementById('todayFeed');
+  const date = todayStr();
+  const todays = attendance.filter(a => a.date === date).slice().reverse();
+  if (todays.length === 0){
+    feed.innerHTML = `<p class="text-sm text-fog font-mono">No attendance logged yet today.</p>`;
+    return;
+  }
+  feed.innerHTML = todays.map(r => `
+    <div class="flex items-center justify-between border-b border-hairline pb-2.5">
+      <div>
+        <p class="text-sm font-medium">${r.name}</p>
+        <p class="text-xs text-fog font-mono">${r.id}</p>
+      </div>
+      <div class="text-right">
+        <span class="badge badge-present">${r.status}</span>
+        <p class="text-[11px] text-fog font-mono mt-1">${r.time}</p>
+      </div>
+    </div>
+  `).join('');
+}
+renderTodayFeed();
+
+/* =========================================================
+   VIEW 0 — DASHBOARD OVERVIEW
+   ========================================================= */
+function computeStats(){
+  const dates = [...new Set(attendance.map(a => a.date))];
+  const totalClasses = dates.length || 0;
+  const totalStudents = students.length;
+
+  const presentByStudent = {};
+  students.forEach(s => presentByStudent[s.id] = 0);
+  attendance.forEach(a => { if (presentByStudent[a.id] !== undefined) presentByStudent[a.id]++; });
+
+  const perStudent = students.map(s => {
+    const present = presentByStudent[s.id] || 0;
+    const absent = Math.max(totalClasses - present, 0);
+    const pct = totalClasses ? Math.round((present/totalClasses)*1000)/10 : 0;
+    return { ...s, present, absent, pct };
+  });
+
+  const totalPresentMarks = perStudent.reduce((a,p) => a+p.present, 0);
+  const totalPossible = totalStudents * totalClasses;
+  const overallPct = totalPossible ? Math.round((totalPresentMarks/totalPossible)*1000)/10 : 0;
+  const avgAttendance = totalClasses ? Math.round((totalPresentMarks/totalClasses)*10)/10 : 0;
+
+  const today = todayStr();
+  const presentToday = new Set(attendance.filter(a => a.date===today).map(a=>a.id)).size;
+  const absentToday = Math.max(totalStudents - presentToday, 0);
+
+  return { totalClasses, totalStudents, perStudent, overallPct, avgAttendance, presentToday, absentToday, totalPresentMarks, dates: dates.sort() };
+}
+
+function statCardHTML(label, value, colorClass, iconSvg){
+  return `
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs font-mono text-fog uppercase tracking-widest">${label}</p>
+        <span class="${colorClass} opacity-70">${iconSvg}</span>
+      </div>
+      <p class="stat-val text-3xl font-semibold ${colorClass}">${value}</p>
+    </div>`;
+}
+
+const ICONS = {
+  book: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V4H6.5A2.5 2.5 0 004 6.5v13z"/></svg>`,
+  check: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>`,
+  x: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>`,
+  pct: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="M18 6L6 18"/></svg>`,
+  avg: `<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>`,
+};
+
+function renderDashboard(){
+  const s = computeStats();
+  document.getElementById('dashStatCards').innerHTML =
+    statCardHTML('Total Classes', s.totalClasses, 'text-paper', ICONS.book) +
+    statCardHTML('Present Today', s.presentToday, 'text-good', ICONS.check) +
+    statCardHTML('Absent Today', s.absentToday, 'text-bad', ICONS.x) +
+    statCardHTML('Overall Attendance', s.overallPct+'%', 'text-warn', ICONS.pct);
+
+  const recent = attendance.slice(-6).reverse();
+  const feed = document.getElementById('recentActivity');
+  document.getElementById('recentCount').textContent = `${attendance.length} events`;
+  if (recent.length === 0){
+    feed.innerHTML = `<p class="text-sm text-fog font-mono">No activity yet — mark attendance to see events here.</p>`;
+    return;
+  }
+  feed.innerHTML = recent.map(r => `
+    <div class="flex items-center justify-between border-b border-hairline pb-2.5">
+      <div class="flex items-center gap-3">
+        <span class="w-7 h-7 rounded-full bg-good/15 text-good flex items-center justify-center text-xs font-mono">${r.name.charAt(0)}</span>
+        <div>
+          <p class="text-sm font-medium">${r.name} <span class="text-fog font-normal">marked present</span></p>
+          <p class="text-xs text-fog font-mono">${r.id} · ${r.date}</p>
+        </div>
+      </div>
+      <span class="text-xs font-mono text-fog">${r.time}</span>
+    </div>
+  `).join('');
+}
+renderDashboard();
+
+/* =========================================================
+   VIEW 3 — ANALYTICS
+   ========================================================= */
+let trendChartInstance = null;
+let barChartInstance = null;
+
+function renderAnalytics(){
+  const s = computeStats();
+
+  document.getElementById('statCards').innerHTML =
+    statCardHTML('Total Classes', s.totalClasses, 'text-paper', ICONS.book) +
+    statCardHTML('Present Count', s.totalPresentMarks, 'text-good', ICONS.check) +
+    statCardHTML('Absent Count', (s.totalStudents*s.totalClasses - s.totalPresentMarks), 'text-bad', ICONS.x) +
+    statCardHTML('Attendance %', s.overallPct+'%', 'text-warn', ICONS.pct) +
+    statCardHTML('Avg / Class', s.avgAttendance, 'text-indigL', ICONS.avg);
+
+  // trend line: present count per date
+  const trendLabels = s.dates;
+  const trendData = trendLabels.map(date => new Set(attendance.filter(a=>a.date===date).map(a=>a.id)).size);
+
+  const ctxT = document.getElementById('trendChart').getContext('2d');
+  if (trendChartInstance) trendChartInstance.destroy();
+  trendChartInstance = new Chart(ctxT, {
+    type: 'line',
+    data: { labels: trendLabels, datasets: [{
+      data: trendData, borderColor:'#818CF8', backgroundColor:'rgba(129,140,248,0.12)',
+      fill:true, tension:.35, pointBackgroundColor:'#818CF8', pointRadius:3, borderWidth:2,
+    }]},
+    options: {
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{ ticks:{ color:'#565D80', font:{family:'JetBrains Mono', size:10} }, grid:{ color:'#151a30' } },
+        y:{ beginAtZero:true, ticks:{ color:'#565D80', font:{family:'JetBrains Mono', size:10}, precision:0 }, grid:{ color:'#151a30' } },
+      }
+    }
+  });
+
+  // bar: per-student attendance %
+  const ctxB = document.getElementById('barChart').getContext('2d');
+  if (barChartInstance) barChartInstance.destroy();
+  barChartInstance = new Chart(ctxB, {
+    type: 'bar',
+    data: { labels: s.perStudent.map(p=>p.name.split(' ')[0]), datasets:[{
+      data: s.perStudent.map(p=>p.pct),
+      backgroundColor: s.perStudent.map(p => p.pct>=75 ? '#34D399' : p.pct>=50 ? '#FBBF24' : '#FB7185'),
+      borderRadius: 6, maxBarThickness: 42,
+    }]},
+    options: {
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{ ticks:{ color:'#8B93B8', font:{family:'Inter', size:11} }, grid:{ display:false } },
+        y:{ beginAtZero:true, max:100, ticks:{ color:'#565D80', font:{family:'JetBrains Mono', size:10} }, grid:{ color:'#151a30' } },
+      }
+    }
+  });
+
+  // log table
+  const body = document.getElementById('logTableBody');
+  document.getElementById('logCount').textContent = `${attendance.length} records`;
+  const sorted = attendance.slice().sort((a,b) => (b.date+b.time).localeCompare(a.date+a.time));
+  body.innerHTML = sorted.length ? sorted.map(r => `
+    <tr>
+      <td class="font-mono text-mist">${r.id}</td>
+      <td>${r.name}</td>
+      <td class="font-mono">${r.date}</td>
+      <td class="font-mono">${r.time}</td>
+      <td><span class="badge badge-present">${r.status}</span></td>
+    </tr>
+  `).join('') : `<tr><td colspan="5" class="text-center text-fog font-mono py-8">No attendance records yet.</td></tr>`;
+}
+
+function exportCSV(){
+  const rows = [['ID','Name','Date','Time','Status'], ...attendance.map(r => [r.id,r.name,r.date,r.time,r.status])];
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `attendance_export_${todayStr()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('CSV export downloaded', 'success');
+}
+
+/* ---- simulated "AI-generated" insights (local heuristic, no external API) ---- */
+function generateInsights(){
+  const s = computeStats();
+  const panel = document.getElementById('insightsPanel');
+  const list = document.getElementById('insightsList');
+  panel.classList.remove('hidden');
+  list.innerHTML = `<p class="text-sm text-mist font-mono">Analyzing attendance patterns…</p>`;
+
+  setTimeout(() => {
+    const insights = [];
+
+    s.perStudent.forEach(p => {
+      if (p.pct < 75 && s.totalClasses > 0){
+        insights.push({ kind:'alert', text:`Alert: ${p.name.split(' ')[0]}'s attendance is at ${p.pct}%, below the 75% requirement. Recommend reaching out.` });
+      }
+    });
+
+    // recent-week trend: last 4 sessions vs prior sessions, per student
+    if (s.dates.length >= 6){
+      const recentDates = s.dates.slice(-4);
+      const priorDates = s.dates.slice(0, -4);
+      s.perStudent.forEach(p => {
+        const recentPresent = attendance.filter(a=>a.id===p.id && recentDates.includes(a.date)).length;
+        const priorPresent = attendance.filter(a=>a.id===p.id && priorDates.includes(a.date)).length;
+        const recentPct = recentDates.length ? recentPresent/recentDates.length : 0;
+        const priorPct = priorDates.length ? priorPresent/priorDates.length : 0;
+        if (priorPct - recentPct >= 0.35){
+          insights.push({ kind:'warn', text:`Trend: ${p.name.split(' ')[0]}'s attendance dropped noticeably in the most recent sessions compared to earlier ones — worth a check-in.` });
+        }
+      });
+    }
+
+    const best = s.perStudent.slice().sort((a,b)=>b.pct-a.pct)[0];
+    if (best && best.pct >= 90){
+      insights.push({ kind:'good', text:`${best.name.split(' ')[0]} has excellent attendance at ${best.pct}% — consistently present across recorded sessions.` });
+    }
+
+    if (s.overallPct && s.overallPct < 80){
+      insights.push({ kind:'warn', text:`Class-wide attendance is averaging ${s.overallPct}%, which is below a healthy 80% benchmark for this period.` });
+    } else if (s.overallPct >= 90) {
+      insights.push({ kind:'good', text:`Class-wide attendance is strong at ${s.overallPct}% across ${s.totalClasses} recorded classes.` });
+    }
+
+    if (insights.length === 0){
+      insights.push({ kind:'good', text:'No attendance risks detected. All enrolled students are tracking within a healthy range.' });
+    }
+
+    const iconFor = { alert:'text-bad', warn:'text-warn', good:'text-good' };
+    const dotFor  = { alert:'bg-bad', warn:'bg-warn', good:'bg-good' };
+
+    list.innerHTML = insights.map(i => `
+      <div class="flex items-start gap-3 pb-3 border-b border-hairline last:border-0 last:pb-0">
+        <span class="w-2 h-2 rounded-full mt-1.5 ${dotFor[i.kind]} flex-shrink-0"></span>
+        <p class="text-sm ${iconFor[i.kind]} leading-relaxed">${i.text}</p>
+      </div>
+    `).join('');
+  }, 900);
+}
+
+/* init */
+renderDashboard();
+</script>
+</body>
+</html>
