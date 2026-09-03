@@ -17,7 +17,7 @@ app.use("/api/student", require("./routes/student.route"))
 connectDB();
 
 // send email
-// sendEmail("njkandalgon@gmail.com", "gaytri");
+// sendEmail("njkandalgon@gmail.com", "nikhil");
 app.listen(PORT, () => {
     console.log(`Server is live on port ${PORT}`);
 })
@@ -31,9 +31,9 @@ app.listen(PORT, () => {
 // Testing + Devops
 // Docker
 // Github Action 
-// Cron Job
+// Cron Job ✔
 // Redis
-// Multer
+// Multer ✔
 
 // Python + Streamlite
 

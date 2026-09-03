@@ -1,5 +1,5 @@
 const Student = require("../model/student.model");
-
+const redis = require("../utils/connect.redis");
 exports.addStudent = async (req, res) => {
     try {
         console.log("hello !!!!", req.body)
@@ -17,10 +17,20 @@ exports.addStudent = async (req, res) => {
 
 exports.getStudent = async (req, res) => {
     try {
+        const cachedStudents = await redis.get("students");
+        if (cachedStudents) {
+            console.log("cached data found")
+            return res.status(200).json({ data: cachedStudents });
+        }
+
+
         const getStudent = await Student.find();
+
+        await redis.set("students", JSON.stringify(getStudent));
+        
         res.status(200).json({ data: getStudent })
     } catch (error) {
-        console.log(error.message)
+        console.log("error:", error.message)
         res.status(500).json({ error: error })
     }
 }
